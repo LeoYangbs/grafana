@@ -23,16 +23,19 @@ export class TimePickerCtrl {
   timeOptions: any;
   refresh: any;
   isOpen: boolean;
+  firstDayOfWeek: number;
   isUtc: boolean;
 
   /** @ngInject */
-  constructor(private $scope, private $rootScope, private timeSrv) {
+  constructor(private $scope, private $rootScope, private $locale, private timeSrv) {
     $scope.ctrl = this;
 
     $rootScope.onAppEvent('shift-time-forward', () => this.move(1), $scope);
     $rootScope.onAppEvent('shift-time-backward', () => this.move(-1), $scope);
     $rootScope.onAppEvent('refresh', () => this.init(), $scope);
     $rootScope.onAppEvent('dash-editor-hidden', () => this.isOpen = false, $scope);
+
+    this.firstDayOfWeek = 1; // FIXME: Get from locale or dashboard config
 
     this.init();
   }
