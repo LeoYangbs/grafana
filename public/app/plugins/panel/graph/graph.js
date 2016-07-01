@@ -297,7 +297,33 @@ function (angular, $, moment, _, kbn, GraphTooltip) {
             max: max,
             label: "Datetime",
             ticks: ticks,
-            timeformat: time_format(ticks, min, max),
+            tickFormatter: function (value) {
+              var format = '';
+              if (!ctrl.panel.xaxis || !ctrl.panel.xaxis.format) {
+                if (min && max && ticks) {
+                  var range = max - min;
+                  var secPerTick = (range/ticks) / 1000;
+                  var oneDay = 86400000;
+                  var oneYear = 31536000000;
+                  if (secPerTick <= 45) {
+                    format = "HH:mm:ss";
+                  } else if (secPerTick <= 7200 || range <= oneDay) {
+                    format = "HH:mm";
+                  } else if (secPerTick <= 80000) {
+                    format = "MM/DD HH:mm";
+                  } else if (secPerTick <= 2419200 || range <= oneYear) {
+                    format = "MM/DD";
+                  } else {
+                    format = "YYYY-MM";
+                  }
+                } else {
+                  format = "HH:mm";
+                }
+              } else {
+                format = ctrl.panel.xaxis.format;
+              }
+              return moment(value).format(format);
+            }
           };
         }
 
