@@ -18,7 +18,6 @@ function (angular, $, moment, _, kbn, GraphTooltip) {
   'use strict';
 
   var module = angular.module('grafana.directives');
-  var labelWidthCache = {};
 
   module.directive('grafanaGraph', function($rootScope, timeSrv) {
     return {
@@ -32,7 +31,6 @@ function (angular, $, moment, _, kbn, GraphTooltip) {
         var sortedSeries;
         var legendSideLastValue = null;
         var rootScope = scope.$root;
-        var panelWidth = 0;
 
         rootScope.onAppEvent('setCrosshair', function(event, info) {
           // do not need to to this if event is from this panel
@@ -101,19 +99,14 @@ function (angular, $, moment, _, kbn, GraphTooltip) {
 
           if (!setElementHeight()) { return true; }
 
-          if (panelWidth === 0) {
+          if(_.isString(data)) {
+            render_panel_as_graphite_png(data);
             return true;
           }
-        }
 
-        function getLabelWidth(text, elem) {
-          var labelWidth = labelWidthCache[text];
-
-          if (!labelWidth) {
-            labelWidth = labelWidthCache[text] = elem.width();
+          if (elem.width() === 0) {
+            return true;
           }
-
-          return labelWidth;
         }
 
         function drawHook(plot) {
@@ -144,7 +137,7 @@ function (angular, $, moment, _, kbn, GraphTooltip) {
               .text(panel.yaxes[0].label)
               .appendTo(elem);
 
-            yaxisLabel[0].style.marginTop = (getLabelWidth(panel.yaxes[0].label, yaxisLabel) / 2) + 'px';
+            yaxisLabel.css("margin-top", yaxisLabel.width() / 2);
           }
 
           // add right axis labels
@@ -153,7 +146,7 @@ function (angular, $, moment, _, kbn, GraphTooltip) {
               .text(panel.yaxes[1].label)
               .appendTo(elem);
 
-            rightLabel[0].style.marginTop = (getLabelWidth(panel.yaxes[1].label, rightLabel) / 2) + 'px';
+            rightLabel.css("margin-top", rightLabel.width() / 2);
           }
         }
 
@@ -166,8 +159,6 @@ function (angular, $, moment, _, kbn, GraphTooltip) {
 
         // Function for rendering panel
         function render_panel() {
-          panelWidth =  elem.width();
-
           if (shouldAbortRender()) {
             return;
           }
@@ -285,9 +276,37 @@ function (angular, $, moment, _, kbn, GraphTooltip) {
         }
 
         function addTimeAxis(options) {
-          var ticks = panelWidth / 100;
+          var ticks = [];
           var min = _.isUndefined(ctrl.range.from) ? null : ctrl.range.from.valueOf();
           var max = _.isUndefined(ctrl.range.to) ? null : ctrl.range.to.valueOf();
+
+          function tickFormatter (value) {
+            var format = '';
+            if (!ctrl.panel.xaxis || !ctrl.panel.xaxis.format) {
+              if (min && max && ticks) {
+                var range = max - min;
+                var secPerTick = (range/ticks) / 1000;
+                var oneDay = 86400000;
+                var oneYear = 31536000000;
+                if (secPerTick <= 45) {
+                  format = "HH:mm:ss";
+                } else if (secPerTick <= 7200 || range <= oneDay) {
+                  format = "HH:mm";
+                } else if (secPerTick <= 80000) {
+                  format = "MM/DD HH:mm";
+                } else if (secPerTick <= 2419200 || range <= oneYear) {
+                  format = "MM/DD";
+                } else {
+                  format = "YYYY-MM";
+                }
+              } else {
+                format = "HH:mm";
+              }
+            } else {
+              format = ctrl.panel.xaxis.format;
+            }
+            return moment(value).format(format);
+          }
 
           options.xaxis = {
             timezone: dashboard.getTimezone(),
@@ -296,35 +315,36 @@ function (angular, $, moment, _, kbn, GraphTooltip) {
             min: min,
             max: max,
             label: "Datetime",
-            ticks: ticks,
-            tickFormatter: function (value) {
-              var format = '';
-              if (!ctrl.panel.xaxis || !ctrl.panel.xaxis.format) {
-                if (min && max && ticks) {
-                  var range = max - min;
-                  var secPerTick = (range/ticks) / 1000;
-                  var oneDay = 86400000;
-                  var oneYear = 31536000000;
-                  if (secPerTick <= 45) {
-                    format = "HH:mm:ss";
-                  } else if (secPerTick <= 7200 || range <= oneDay) {
-                    format = "HH:mm";
-                  } else if (secPerTick <= 80000) {
-                    format = "MM/DD HH:mm";
-                  } else if (secPerTick <= 2419200 || range <= oneYear) {
-                    format = "MM/DD";
-                  } else {
-                    format = "YYYY-MM";
-                  }
-                } else {
-                  format = "HH:mm";
-                }
-              } else {
-                format = ctrl.panel.xaxis.format;
+            ticks: (!ctrl.panel.xaxis.tickFrequency || ctrl.panel.xaxis.tickFrequency === 0) ? (elem.width() / 100) : function (axis) {
+              var i = 0, d, interval, ticksArray = [];
+              var offset = ctrl.panel.xaxis.tickOffset;
+              switch(ctrl.panel.xaxis.tickFrequency) {
+                case 1:
+                  interval = 'days';
+                  break;
+                case 2:
+                  interval = 'weeks';
+                  break;
+                case 3:
+                  interval = 'months';
+                  break;
               }
-              return moment(value).format(format);
-            }
+              d = moment(axis.min).startOf('week');
+              if (offset) {
+                d.add(offset);
+              }
+              do {
+                d = d.add(i, interval);
+                var label = tickFormatter(d.valueOf());
+                ticksArray.push([d, label]);
+                i++;
+              } while (d < axis.max);
+              ticks = ticksArray.length;
+              return ticksArray;
+            },
+            tickFormatter: tickFormatter
           };
+          console.log(ctrl.panel.xaxis);
         }
 
         function addGridThresholds(options, panel) {
@@ -478,6 +498,80 @@ function (angular, $, moment, _, kbn, GraphTooltip) {
           return "%H:%M";
         }
 
+        function render_panel_as_graphite_png(url) {
+          url += '&width=' + elem.width();
+          url += '&height=' + elem.css('height').replace('px', '');
+          url += '&bgcolor=1f1f1f'; // @grayDarker & @grafanaPanelBackground
+          url += '&fgcolor=BBBFC2'; // @textColor & @grayLighter
+          url += panel.stack ? '&areaMode=stacked' : '';
+          url += panel.fill !== 0 ? ('&areaAlpha=' + (panel.fill/10).toFixed(1)) : '';
+          url += panel.linewidth !== 0 ? '&lineWidth=' + panel.linewidth : '';
+          url += panel.legend.show ? '&hideLegend=false' : '&hideLegend=true';
+
+          if (panel.yaxes && panel.yaxes.length > 0) {
+            var showYaxis = false;
+            for(var i = 0; panel.yaxes.length > i; i++) {
+              if (panel.yaxes[i].show) {
+                url += (panel.yaxes[i].min !== null && panel.yaxes[i].min !== undefined) ? '&yMin=' + panel.yaxes[i].min : '';
+                url += (panel.yaxes[i].max !== null && panel.yaxes[i].max !== undefined) ? '&yMax=' + panel.yaxes[i].max : '';
+                showYaxis = true;
+                break;
+              }
+            }
+            url += showYaxis ? '' : '&hideYAxis=true';
+          }
+
+          url += panel.xaxis.show ? '' : '&hideAxes=true';
+
+          switch(panel.yaxes[0].format) {
+            case 'bytes':
+              url += '&yUnitSystem=binary';
+              break;
+            case 'bits':
+              url += '&yUnitSystem=binary';
+              break;
+            case 'bps':
+              url += '&yUnitSystem=si';
+              break;
+            case 'pps':
+              url += '&yUnitSystem=si';
+              break;
+            case 'Bps':
+              url += '&yUnitSystem=si';
+              break;
+            case 'short':
+              url += '&yUnitSystem=si';
+              break;
+            case 'joule':
+              url += '&yUnitSystem=si';
+              break;
+            case 'watt':
+              url += '&yUnitSystem=si';
+              break;
+            case 'ev':
+              url += '&yUnitSystem=si';
+              break;
+            case 'none':
+              url += '&yUnitSystem=none';
+              break;
+          }
+
+          switch(panel.nullPointMode) {
+            case 'connected':
+              url += '&lineMode=connected';
+              break;
+            case 'null':
+              break; // graphite default lineMode
+            case 'null as zero':
+              url += "&drawNullAsZero=true";
+              break;
+          }
+
+          url += panel.steppedLine ? '&lineMode=staircase' : '';
+
+          elem.html('<img src="' + url + '"></img>');
+        }
+
         new GraphTooltip(elem, dashboard, scope, function() {
           return sortedSeries;
         });
@@ -493,4 +587,5 @@ function (angular, $, moment, _, kbn, GraphTooltip) {
       }
     };
   });
+
 });

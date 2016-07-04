@@ -12,6 +12,7 @@ import _ from 'lodash';
 import TimeSeries from 'app/core/time_series2';
 import * as fileExport from 'app/core/utils/file_export';
 import {MetricsPanelCtrl} from 'app/plugins/sdk';
+import {parseDateMath} from 'app/core/utils/datemath';
 
 class GraphCtrl extends MetricsPanelCtrl {
   static template = template;
@@ -19,6 +20,7 @@ class GraphCtrl extends MetricsPanelCtrl {
   hiddenSeries: any = {};
   seriesList: any = [];
   logScales: any;
+  tickFrequencies: any;
   unitFormats: any;
   annotationsPromise: any;
   datapointsCount: number;
@@ -50,7 +52,9 @@ class GraphCtrl extends MetricsPanelCtrl {
       }
     ],
     xaxis: {
-      show: true
+      show: true,
+      tickFrequency: 0,
+      tickOffset: 0
     },
     grid          : {
       threshold1: null,
@@ -137,6 +141,14 @@ class GraphCtrl extends MetricsPanelCtrl {
       'log (base 32)': 32,
       'log (base 1024)': 1024
     };
+
+    this.tickFrequencies = {
+      'automatic': 0,
+      'daily': 1,
+      'weekly': 2,
+      'monthly': 3
+    };
+
     this.unitFormats = kbn.getUnitFormats();
   }
 
@@ -216,6 +228,7 @@ class GraphCtrl extends MetricsPanelCtrl {
   }
 
   onRender() {
+
     if (!this.seriesList) { return; }
 
     for (let series of this.seriesList) {
@@ -317,6 +330,18 @@ class GraphCtrl extends MetricsPanelCtrl {
   exportCsvColumns() {
     fileExport.exportSeriesListToCsvColumns(this.seriesList);
   }
+
+  parseOffset(tickOffset) {
+    console.log("in parseOffset", tickOffset);
+    if (tickOffset.length > 0) {
+
+      var retval = parseDateMath(tickOffset, moment());
+      console.log("in if", retval);
+      this.panel.xaxis.tickOffset = retval;
+    }
+    this.render();
+  }
+
 }
 
 export {GraphCtrl, GraphCtrl as PanelCtrl}
