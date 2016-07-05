@@ -53,7 +53,7 @@
       </div>
       <div class="gf-form">
         <label class="gf-form-label width-7">Tick Offset</label>
-        <input class="gf-form-input max-width-15" placeholder="auto" empty-to-null ng-model="tickOffset" ng-change="ctrl.parseOffset(tickOffset)" ng-model-onblur>
+        <input class="gf-form-input max-width-15" placeholder="auto" empty-to-null ng-model="ctrl.panel.xaxis.tickOffset" ng-change="ctrl.render()" ng-model-onblur>
       </div>
     </div>
   </div>

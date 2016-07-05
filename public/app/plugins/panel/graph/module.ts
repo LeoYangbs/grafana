@@ -337,18 +337,6 @@ class GraphCtrl extends MetricsPanelCtrl {
     fileExport.exportSeriesListToCsvColumns(this.seriesList);
   }
 
-  parseOffset(tickOffset) {
-    if (tickOffset && tickOffset.length > 0) {
-      if (tickOffset.indexOf('+') > -1 || tickOffset.indexOf('/') > -1) {
-        // TODO: Display as a visual error hint to user
-        throw new Error('Invalid date offset. Only negative offsets allowed');
-      }
-      tickOffset = '-' + tickOffset;
-    }
-    this.panel.xaxis.tickOffset = tickOffset;
-    this.render();
-  }
-
 }
 
 export {GraphCtrl, GraphCtrl as PanelCtrl}

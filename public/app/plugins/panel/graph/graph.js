@@ -360,6 +360,12 @@ function (angular, $, moment, _, dateMath, kbn, GraphTooltip) {
               }
 
               if (offset) {
+                if (offset.indexOf('+') > -1 || offset.indexOf('/') > -1) {
+                  // TODO: Display as a visual error hint to user
+                  throw new Error('Invalid date offset. Only negative offsets allowed');
+                }
+                offset = '-' + offset;
+
                 var offsetDate = dateMath.parseDateMath(offset, date);
                 if (offsetDate) {
                   date = offsetDate;
