@@ -144,9 +144,15 @@ class GraphCtrl extends MetricsPanelCtrl {
 
     this.tickFrequencies = {
       'automatic': 0,
-      'daily': 1,
-      'weekly': 2,
-      'monthly': 3
+      'per millisecond': 1,
+      'per second': 2,
+      'per minute': 3,
+      'hourly': 4,
+      'daily': 5,
+      'weekly': 6,
+      'monthly': 7,
+      'quarterly': 8,
+      'yearly': 9
     };
 
     this.unitFormats = kbn.getUnitFormats();
@@ -332,12 +338,11 @@ class GraphCtrl extends MetricsPanelCtrl {
   }
 
   parseOffset(tickOffset) {
-    console.log("in parseOffset", tickOffset);
-    if (tickOffset.length > 0) {
-
-      var retval = parseDateMath(tickOffset, moment());
-      console.log("in if", retval);
-      this.panel.xaxis.tickOffset = retval;
+    if (tickOffset && tickOffset.length > 0) {
+      if (tickOffset.indexOf('+') === -1 && tickOffset.indexOf('-') === -1 && tickOffset.indexOf('/') === -1) {
+        tickOffset = '+' + tickOffset;
+      }
+      this.panel.xaxis.tickOffset = tickOffset;
     }
     this.render();
   }

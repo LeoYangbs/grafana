@@ -3,6 +3,7 @@ define([
   'jquery',
   'moment',
   'lodash',
+  'app/core/utils/datemath',
   'app/core/utils/kbn',
   './graph_tooltip',
   'jquery.flot',
@@ -14,7 +15,7 @@ define([
   'jquery.flot.crosshair',
   './jquery.flot.events',
 ],
-function (angular, $, moment, _, kbn, GraphTooltip) {
+function (angular, $, moment, _, dateMath, kbn, GraphTooltip) {
   'use strict';
 
   var module = angular.module('grafana.directives');
@@ -316,35 +317,65 @@ function (angular, $, moment, _, kbn, GraphTooltip) {
             max: max,
             label: "Datetime",
             ticks: (!ctrl.panel.xaxis.tickFrequency || ctrl.panel.xaxis.tickFrequency === 0) ? (elem.width() / 100) : function (axis) {
-              var i = 0, d, interval, ticksArray = [];
+              var i = 0;
+              var date = moment(axis.min);
+              var currentDate;
+              var interval;
+              var ticksArray = [];
               var offset = ctrl.panel.xaxis.tickOffset;
+
               switch(ctrl.panel.xaxis.tickFrequency) {
                 case 1:
-                  interval = 'days';
+                  interval = 'milliseconds';
                   break;
                 case 2:
-                  interval = 'weeks';
+                  interval = 'seconds';
                   break;
                 case 3:
+                  interval = 'minutes';
+                  break;
+                case 4:
+                  interval = 'hours';
+                  break;
+                case 5:
+                  date.startOf('day');
+                  interval = 'weeks';
+                  break;
+                case 6:
+                  date.startOf('week');
+                  interval = 'weeks';
+                  break;
+                case 7:
+                  date.startOf('month');
                   interval = 'months';
                   break;
+                case 8:
+                  date.startOf('quarter');
+                  interval = 'quarters';
+                  break;
+                case 9:
+                  date.startOf('year');
+                  interval = 'years';
+                  break;
               }
-              d = moment(axis.min).startOf('week');
+
               if (offset) {
-                d.add(offset);
+                var offsetDate = dateMath.parseDateMath(offset, date);
+                if (offsetDate) date = offsetDate;
               }
+
               do {
-                d = d.add(i, interval);
-                var label = tickFormatter(d.valueOf());
-                ticksArray.push([d, label]);
+                currentDate = date.clone().add(i, interval);
+                var label = tickFormatter(currentDate.valueOf());
+                ticksArray.push([currentDate, label]);
                 i++;
-              } while (d < axis.max);
+              } while (currentDate < axis.max);
+
               ticks = ticksArray.length;
               return ticksArray;
             },
             tickFormatter: tickFormatter
           };
-          console.log(ctrl.panel.xaxis);
         }
 
         function addGridThresholds(options, panel) {
@@ -471,31 +502,6 @@ function (angular, $, moment, _, kbn, GraphTooltip) {
           axis.tickFormatter = function(val, axis) {
             return kbn.valueFormats[format](val, axis.tickDecimals, axis.scaledDecimals);
           };
-        }
-
-        function time_format(ticks, min, max) {
-          if (min && max && ticks) {
-            var range = max - min;
-            var secPerTick = (range/ticks) / 1000;
-            var oneDay = 86400000;
-            var oneYear = 31536000000;
-
-            if (secPerTick <= 45) {
-              return "%H:%M:%S";
-            }
-            if (secPerTick <= 7200 || range <= oneDay) {
-              return "%H:%M";
-            }
-            if (secPerTick <= 80000) {
-              return "%m/%d %H:%M";
-            }
-            if (secPerTick <= 2419200 || range <= oneYear) {
-              return "%m/%d";
-            }
-            return "%Y-%m";
-          }
-
-          return "%H:%M";
         }
 
         function render_panel_as_graphite_png(url) {
