@@ -361,7 +361,9 @@ function (angular, $, moment, _, dateMath, kbn, GraphTooltip) {
 
               if (offset) {
                 var offsetDate = dateMath.parseDateMath(offset, date);
-                if (offsetDate) date = offsetDate;
+                if (offsetDate) {
+                  date = offsetDate;
+                }
               }
 
               do {

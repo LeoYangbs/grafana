@@ -338,12 +338,11 @@ class GraphCtrl extends MetricsPanelCtrl {
   }
 
   parseOffset(tickOffset) {
-    if (tickOffset && tickOffset.length > 0) {
-      if (tickOffset.indexOf('+') === -1 && tickOffset.indexOf('-') === -1 && tickOffset.indexOf('/') === -1) {
-        tickOffset = '+' + tickOffset;
-      }
-      this.panel.xaxis.tickOffset = tickOffset;
+    if (tickOffset && tickOffset.length > 0
+      && tickOffset.indexOf('+') === -1 && tickOffset.indexOf('-') === -1 && tickOffset.indexOf('/') === -1) {
+      tickOffset = '+' + tickOffset;
     }
+    this.panel.xaxis.tickOffset = tickOffset;
     this.render();
   }
 
