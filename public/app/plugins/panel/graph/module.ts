@@ -338,9 +338,12 @@ class GraphCtrl extends MetricsPanelCtrl {
   }
 
   parseOffset(tickOffset) {
-    if (tickOffset && tickOffset.length > 0
-      && tickOffset.indexOf('+') === -1 && tickOffset.indexOf('-') === -1 && tickOffset.indexOf('/') === -1) {
-      tickOffset = '+' + tickOffset;
+    if (tickOffset && tickOffset.length > 0) {
+      if (tickOffset.indexOf('+') > -1 || tickOffset.indexOf('/') > -1) {
+        // TODO: Display as a visual error hint to user
+        throw new Error('Invalid date offset. Only negative offsets allowed');
+      }
+      tickOffset = '-' + tickOffset;
     }
     this.panel.xaxis.tickOffset = tickOffset;
     this.render();

@@ -339,7 +339,7 @@ function (angular, $, moment, _, dateMath, kbn, GraphTooltip) {
                   break;
                 case 5:
                   date.startOf('day');
-                  interval = 'weeks';
+                  interval = 'days';
                   break;
                 case 6:
                   date.startOf('week');
