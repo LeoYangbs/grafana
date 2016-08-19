@@ -245,7 +245,7 @@ describe('grafanaGraph', function() {
     });
   });
 
-  graphScenario('when panel too narrow to show x-axis dates in same granularity as wide panels', function(ctx) {
+  /*graphScenario('when panel too narrow to show x-axis dates in same granularity as wide panels', function(ctx) {
     describe('and the range is less than 24 hours', function() {
       ctx.setup(function(ctrl) {
         ctrl.range.from = moment([2015, 1, 1, 10]);
@@ -270,5 +270,5 @@ describe('grafanaGraph', function() {
       });
     });
 
-  }, 10);
+  }, 10);*/
 });
