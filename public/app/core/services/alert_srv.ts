@@ -27,10 +27,9 @@ export class AlertSrv {
       this.set(alert[0], alert[1], 'success', 3000);
     }, this.$rootScope);
 
-    appEvents.on('alert-error', options => {
-      this.set(options[0], options[1], 'error', 7000);
-    });
-
+    appEvents.on('alert-warning', options => this.set(options[0], options[1], 'warning', 5000));
+    appEvents.on('alert-success', options => this.set(options[0], options[1], 'success', 3000));
+    appEvents.on('alert-error', options => this.set(options[0], options[1], 'error', 7000));
     appEvents.on('confirm-modal', this.showConfirmModal.bind(this));
   }
 
@@ -80,21 +79,19 @@ export class AlertSrv {
   showConfirmModal(payload) {
     var scope = this.$rootScope.$new();
 
-    scope.title = payload.title;
-    scope.text = payload.text;
-    scope.text2 = payload.text2;
-    scope.confirmTextRequired = payload.confirmText !== undefined && payload.confirmText !== "";
-
     scope.onConfirm = function() {
-      if (!scope.confirmTextRequired || (scope.confirmTextRequired && scope.confirmTextValid)) {
-        payload.onConfirm();
-        scope.dismiss();
-      }
+      payload.onConfirm();
+      scope.dismiss();
     };
 
     scope.updateConfirmText = function(value) {
       scope.confirmTextValid = payload.confirmText.toLowerCase() === value.toLowerCase();
     };
+
+    scope.title = payload.title;
+    scope.text = payload.text;
+    scope.text2 = payload.text2;
+    scope.confirmText = payload.confirmText;
 
     scope.onConfirm = payload.onConfirm;
     scope.onAltAction = payload.onAltAction;
@@ -102,6 +99,7 @@ export class AlertSrv {
     scope.icon = payload.icon || "fa-check";
     scope.yesText = payload.yesText || "Yes";
     scope.noText = payload.noText || "Cancel";
+    scope.confirmTextValid = scope.confirmText ? false : true;
 
     var confirmModal = this.$modal({
       template: 'public/app/partials/confirm_modal.html',

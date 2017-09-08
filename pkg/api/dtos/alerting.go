@@ -3,30 +3,32 @@ package dtos
 import (
 	"time"
 
+	"github.com/grafana/grafana/pkg/components/null"
 	"github.com/grafana/grafana/pkg/components/simplejson"
 	m "github.com/grafana/grafana/pkg/models"
 )
 
 type AlertRule struct {
-	Id             int64               `json:"id"`
-	DashboardId    int64               `json:"dashboardId"`
-	PanelId        int64               `json:"panelId"`
-	Name           string              `json:"name"`
-	Message        string              `json:"message"`
-	State          m.AlertStateType    `json:"state"`
-	Severity       m.AlertSeverityType `json:"severity"`
-	NewStateDate   time.Time           `json:"newStateDate"`
-	EvalDate       time.Time           `json:"evalDate"`
-	ExecutionError string              `json:"executionError"`
-	DashbboardUri  string              `json:"dashboardUri"`
+	Id             int64            `json:"id"`
+	DashboardId    int64            `json:"dashboardId"`
+	PanelId        int64            `json:"panelId"`
+	Name           string           `json:"name"`
+	Message        string           `json:"message"`
+	State          m.AlertStateType `json:"state"`
+	NewStateDate   time.Time        `json:"newStateDate"`
+	EvalDate       time.Time        `json:"evalDate"`
+	EvalData       *simplejson.Json `json:"evalData"`
+	ExecutionError string           `json:"executionError"`
+	DashbboardUri  string           `json:"dashboardUri"`
 }
 
 type AlertNotification struct {
-	Id      int64     `json:"id"`
-	Name    string    `json:"name"`
-	Type    string    `json:"type"`
-	Created time.Time `json:"created"`
-	Updated time.Time `json:"updated"`
+	Id        int64     `json:"id"`
+	Name      string    `json:"name"`
+	Type      string    `json:"type"`
+	IsDefault bool      `json:"isDefault"`
+	Created   time.Time `json:"created"`
+	Updated   time.Time `json:"updated"`
 }
 
 type AlertTestCommand struct {
@@ -35,11 +37,13 @@ type AlertTestCommand struct {
 }
 
 type AlertTestResult struct {
-	Firing      bool                  `json:"firing"`
-	TimeMs      string                `json:"timeMs"`
-	Error       string                `json:"error,omitempty"`
-	EvalMatches []*EvalMatch          `json:"matches,omitempty"`
-	Logs        []*AlertTestResultLog `json:"logs,omitempty"`
+	Firing         bool                  `json:"firing"`
+	State          m.AlertStateType      `json:"state"`
+	ConditionEvals string                `json:"conditionEvals"`
+	TimeMs         string                `json:"timeMs"`
+	Error          string                `json:"error,omitempty"`
+	EvalMatches    []*EvalMatch          `json:"matches,omitempty"`
+	Logs           []*AlertTestResultLog `json:"logs,omitempty"`
 }
 
 type AlertTestResultLog struct {
@@ -50,5 +54,20 @@ type AlertTestResultLog struct {
 type EvalMatch struct {
 	Tags   map[string]string `json:"tags,omitempty"`
 	Metric string            `json:"metric"`
-	Value  float64           `json:"value"`
+	Value  null.Float        `json:"value"`
+}
+
+type NotificationTestCommand struct {
+	Name     string           `json:"name"`
+	Type     string           `json:"type"`
+	Settings *simplejson.Json `json:"settings"`
+}
+
+type PauseAlertCommand struct {
+	AlertId int64 `json:"alertId"`
+	Paused  bool  `json:"paused"`
+}
+
+type PauseAllAlertsCommand struct {
+	Paused bool `json:"paused"`
 }

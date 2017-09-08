@@ -58,10 +58,9 @@ function pluginDirectiveLoader($compile, datasourceSrv, $rootScope, $q, $http, $
     var componentInfo: any = {
       name: 'panel-plugin-' + scope.panel.type,
       bindings: {dashboard: "=", panel: "=", row: "="},
-      attrs: {dashboard: "dashboard", panel: "panel", row: "row"},
+      attrs: {dashboard: "ctrl.dashboard", panel: "panel", row: "ctrl.row"},
     };
 
-    var panelElemName = 'panel-' + scope.panel.type;
     let panelInfo = config.panels[scope.panel.type];
     var panelCtrlPromise = Promise.resolve(UnknownPanelCtrl);
     if (panelInfo) {
@@ -75,7 +74,7 @@ function pluginDirectiveLoader($compile, datasourceSrv, $rootScope, $q, $http, $
 
       if (!PanelCtrl || PanelCtrl.registered) {
         return componentInfo;
-      };
+      }
 
       if (PanelCtrl.templatePromise) {
         return PanelCtrl.templatePromise.then(res => {
@@ -136,12 +135,12 @@ function pluginDirectiveLoader($compile, datasourceSrv, $rootScope, $q, $http, $
       }
       // Annotations
       case "annotations-query-ctrl": {
-        return System.import(scope.currentDatasource.meta.module).then(function(dsModule) {
+        return System.import(scope.ctrl.currentDatasource.meta.module).then(function(dsModule) {
           return {
-            baseUrl: scope.currentDatasource.meta.baseUrl,
-            name: 'annotations-query-ctrl-' + scope.currentDatasource.meta.id,
+            baseUrl: scope.ctrl.currentDatasource.meta.baseUrl,
+            name: 'annotations-query-ctrl-' + scope.ctrl.currentDatasource.meta.id,
             bindings: {annotation: "=", datasource: "="},
-            attrs: {"annotation": "currentAnnotation", datasource: "currentDatasource"},
+            attrs: {"annotation": "ctrl.currentAnnotation", datasource: "ctrl.currentDatasource"},
             Component: dsModule.AnnotationsQueryCtrl,
           };
         });

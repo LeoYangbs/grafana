@@ -1,6 +1,7 @@
 package alerting
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -16,51 +17,81 @@ type EvalContext struct {
 	EvalMatches     []*EvalMatch
 	Logs            []*ResultLogEntry
 	Error           error
-	Description     string
+	ConditionEvals  string
 	StartTime       time.Time
 	EndTime         time.Time
 	Rule            *Rule
-	DoneChan        chan bool
-	CancelChan      chan bool
 	log             log.Logger
 	dashboardSlug   string
 	ImagePublicUrl  string
 	ImageOnDiskPath string
+	NoDataFound     bool
+	PrevAlertState  m.AlertStateType
+
+	Ctx context.Context
+}
+
+func NewEvalContext(alertCtx context.Context, rule *Rule) *EvalContext {
+	return &EvalContext{
+		Ctx:            alertCtx,
+		StartTime:      time.Now(),
+		Rule:           rule,
+		Logs:           make([]*ResultLogEntry, 0),
+		EvalMatches:    make([]*EvalMatch, 0),
+		log:            log.New("alerting.evalContext"),
+		PrevAlertState: rule.State,
+	}
+}
+
+type StateDescription struct {
+	Color string
+	Text  string
+	Data  string
+}
+
+func (c *EvalContext) GetStateModel() *StateDescription {
+	switch c.Rule.State {
+	case m.AlertStateOK:
+		return &StateDescription{
+			Color: "#36a64f",
+			Text:  "OK",
+		}
+	case m.AlertStateNoData:
+		return &StateDescription{
+			Color: "#888888",
+			Text:  "No Data",
+		}
+	case m.AlertStateAlerting:
+		return &StateDescription{
+			Color: "#D63232",
+			Text:  "Alerting",
+		}
+	default:
+		panic("Unknown rule state " + c.Rule.State)
+	}
+}
+
+func (c *EvalContext) ShouldUpdateAlertState() bool {
+	return c.Rule.State != c.PrevAlertState
+}
+
+func (c *EvalContext) ShouldSendNotification() bool {
+	if (c.PrevAlertState == m.AlertStatePending) && (c.Rule.State == m.AlertStateOK) {
+		return false
+	}
+
+	return true
 }
 
 func (a *EvalContext) GetDurationMs() float64 {
 	return float64(a.EndTime.Nanosecond()-a.StartTime.Nanosecond()) / float64(1000000)
 }
 
-func (c *EvalContext) GetColor() string {
-	if !c.Firing {
-		return "#36a64f"
-	}
-
-	if c.Rule.Severity == m.AlertSeverityWarning {
-		return "#fd821b"
-	} else {
-		return "#D63232"
-	}
-}
-
-func (c *EvalContext) GetStateText() string {
-	if !c.Firing {
-		return "OK"
-	}
-
-	if c.Rule.Severity == m.AlertSeverityWarning {
-		return "WARNING"
-	} else {
-		return "CRITICAL"
-	}
-}
-
 func (c *EvalContext) GetNotificationTitle() string {
-	return "[" + c.GetStateText() + "] " + c.Rule.Name
+	return "[" + c.GetStateModel().Text + "] " + c.Rule.Name
 }
 
-func (c *EvalContext) getDashboardSlug() (string, error) {
+func (c *EvalContext) GetDashboardSlug() (string, error) {
 	if c.dashboardSlug != "" {
 		return c.dashboardSlug, nil
 	}
@@ -75,31 +106,14 @@ func (c *EvalContext) getDashboardSlug() (string, error) {
 }
 
 func (c *EvalContext) GetRuleUrl() (string, error) {
-	if slug, err := c.getDashboardSlug(); err != nil {
+	if c.IsTestRun {
+		return setting.AppUrl, nil
+	}
+
+	if slug, err := c.GetDashboardSlug(); err != nil {
 		return "", err
 	} else {
-		ruleUrl := fmt.Sprintf("%sdashboard/db/%s?fullscreen&edit&tab=alert&panelId=%d", setting.AppUrl, slug, c.Rule.PanelId)
+		ruleUrl := fmt.Sprintf("%sdashboard/db/%s?fullscreen&edit&tab=alert&panelId=%d&orgId=%d", setting.AppUrl, slug, c.Rule.PanelId, c.Rule.OrgId)
 		return ruleUrl, nil
-	}
-}
-
-func (c *EvalContext) GetImageUrl() (string, error) {
-	if slug, err := c.getDashboardSlug(); err != nil {
-		return "", err
-	} else {
-		ruleUrl := fmt.Sprintf("%sdashboard-solo/db/%s?&panelId=%d", setting.AppUrl, slug, c.Rule.PanelId)
-		return ruleUrl, nil
-	}
-}
-
-func NewEvalContext(rule *Rule) *EvalContext {
-	return &EvalContext{
-		StartTime:   time.Now(),
-		Rule:        rule,
-		Logs:        make([]*ResultLogEntry, 0),
-		EvalMatches: make([]*EvalMatch, 0),
-		DoneChan:    make(chan bool, 1),
-		CancelChan:  make(chan bool, 1),
-		log:         log.New("alerting.evalContext"),
 	}
 }

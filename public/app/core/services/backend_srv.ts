@@ -9,8 +9,8 @@ export class BackendSrv {
   inFlightRequests = {};
   HTTP_REQUEST_CANCELLED = -1;
 
-    /** @ngInject */
-  constructor(private $http, private alertSrv, private $rootScope, private $q, private $timeout) {
+  /** @ngInject */
+  constructor(private $http, private alertSrv, private $rootScope, private $q, private $timeout, private contextSrv) {
   }
 
   get(url, params?) {
@@ -23,7 +23,7 @@ export class BackendSrv {
 
   post(url, data) {
     return this.request({ method: 'POST', url: url, data: data });
-  };
+  }
 
   patch(url, data) {
     return this.request({ method: 'PATCH', url: url, data: data });
@@ -63,18 +63,26 @@ export class BackendSrv {
 
   request(options) {
     options.retry = options.retry || 0;
-    var requestIsLocal = options.url.indexOf('/') === 0;
+    var requestIsLocal = !options.url.match(/^http/);
     var firstAttempt = options.retry === 0;
 
-    if (requestIsLocal && !options.hasSubUrl) {
-      options.url = config.appSubUrl + options.url;
-      options.hasSubUrl = true;
+    if (requestIsLocal) {
+      if (this.contextSrv.user && this.contextSrv.user.orgId) {
+        options.headers = options.headers || {};
+        options.headers['X-Grafana-Org-Id'] = this.contextSrv.user.orgId;
+      }
+
+      if (options.url.indexOf("/") === 0) {
+        options.url = options.url.substring(1);
+      }
     }
 
     return this.$http(options).then(results => {
       if (options.method !== 'GET') {
         if (results && results.data.message) {
-          this.alertSrv.set(results.data.message, '', 'success', 3000);
+          if (options.showSuccessAlert !== false) {
+            this.alertSrv.set(results.data.message, '', 'success', 3000);
+          }
         }
       }
       return results.data;
@@ -90,7 +98,22 @@ export class BackendSrv {
       this.$timeout(this.requestErrorHandler.bind(this, err), 50);
       throw err;
     });
-  };
+  }
+
+  addCanceler(requestId, canceler) {
+    if (requestId in this.inFlightRequests) {
+      this.inFlightRequests[requestId].push(canceler);
+    } else {
+      this.inFlightRequests[requestId] = [canceler];
+    }
+  }
+
+  resolveCancelerIfExists(requestId) {
+    var cancelers = this.inFlightRequests[requestId];
+    if (!_.isUndefined(cancelers) && cancelers.length) {
+      cancelers[0].resolve();
+    }
+  }
 
   datasourceRequest(options) {
     options.retry = options.retry || 0;
@@ -99,24 +122,32 @@ export class BackendSrv {
     // particular query. If the requestID exists, the promise it is keyed to
     // is canceled, canceling the previous datasource request if it is still
     // in-flight.
-    var canceler;
-    if (options.requestId) {
-      canceler = this.inFlightRequests[options.requestId];
-      if (canceler) {
-        canceler.resolve();
-      }
+    var requestId = options.requestId;
+    if (requestId) {
+      this.resolveCancelerIfExists(requestId);
       // create new canceler
-      canceler = this.$q.defer();
+      var canceler = this.$q.defer();
       options.timeout = canceler.promise;
-      this.inFlightRequests[options.requestId] = canceler;
+      this.addCanceler(requestId, canceler);
     }
 
-    var requestIsLocal = options.url.indexOf('/') === 0;
+    var requestIsLocal = !options.url.match(/^http/);
     var firstAttempt = options.retry === 0;
 
-    if (requestIsLocal && options.headers && options.headers.Authorization) {
-      options.headers['X-DS-Authorization'] = options.headers.Authorization;
-      delete options.headers.Authorization;
+    if (requestIsLocal) {
+      if (this.contextSrv.user && this.contextSrv.user.orgId) {
+        options.headers = options.headers || {};
+        options.headers['X-Grafana-Org-Id'] = this.contextSrv.user.orgId;
+      }
+
+      if (options.url.indexOf("/") === 0) {
+        options.url = options.url.substring(1);
+      }
+
+      if (options.headers && options.headers.Authorization) {
+        options.headers['X-DS-Authorization'] = options.headers.Authorization;
+        delete options.headers.Authorization;
+      }
     }
 
     return this.$http(options).catch(err => {
@@ -152,10 +183,10 @@ export class BackendSrv {
     }).finally(() => {
       // clean up
       if (options.requestId) {
-        delete this.inFlightRequests[options.requestId];
+        this.inFlightRequests[options.requestId].shift();
       }
     });
-  };
+  }
 
   loginPing() {
     return this.request({url: '/api/login/ping', method: 'GET', retry: 1 });

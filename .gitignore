@@ -25,6 +25,8 @@ public/css/*.min.css
 *.swp
 .idea/
 *.iml
+*.tmp
+.vscode/
 
 /data/*
 /bin/*

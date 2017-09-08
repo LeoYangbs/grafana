@@ -11,7 +11,6 @@ import (
 	"github.com/grafana/grafana/pkg/middleware"
 	m "github.com/grafana/grafana/pkg/models"
 	"github.com/grafana/grafana/pkg/setting"
-	"github.com/grafana/grafana/pkg/util"
 )
 
 const (
@@ -25,11 +24,20 @@ func LoginView(c *middleware.Context) {
 		return
 	}
 
-	viewData.Settings["googleAuthEnabled"] = setting.OAuthService.Google
-	viewData.Settings["githubAuthEnabled"] = setting.OAuthService.GitHub
+	enabledOAuths := make(map[string]interface{})
+	for key, oauth := range setting.OAuthService.OAuthInfos {
+		enabledOAuths[key] = map[string]string{"name": oauth.Name}
+	}
+
+	viewData.Settings["oauth"] = enabledOAuths
 	viewData.Settings["disableUserSignUp"] = !setting.AllowUserSignUp
 	viewData.Settings["loginHint"] = setting.LoginHint
-	viewData.Settings["allowUserPassLogin"] = setting.AllowUserPassLogin
+	viewData.Settings["disableLoginForm"] = setting.DisableLoginForm
+
+	if loginError, ok := c.Session.Get("loginError").(string); ok {
+		c.Session.Delete("loginError")
+		viewData.Settings["loginError"] = loginError
+	}
 
 	if !tryLoginUsingRememberCookie(c) {
 		c.HTML(200, VIEW_INDEX, viewData)
@@ -70,8 +78,7 @@ func tryLoginUsingRememberCookie(c *middleware.Context) bool {
 	user := userQuery.Result
 
 	// validate remember me cookie
-	if val, _ := c.GetSuperSecureCookie(
-		util.EncodeMd5(user.Rands+user.Password), setting.CookieRememberName); val != user.Login {
+	if val, _ := c.GetSuperSecureCookie(user.Rands+user.Password, setting.CookieRememberName); val != user.Login {
 		return false
 	}
 
@@ -90,6 +97,10 @@ func LoginApiPing(c *middleware.Context) {
 }
 
 func LoginPost(c *middleware.Context, cmd dtos.LoginCommand) Response {
+	if setting.DisableLoginForm {
+		return ApiError(401, "Login is disabled", nil)
+	}
+
 	authQuery := login.LoginUserQuery{
 		Username: cmd.User,
 		Password: cmd.Password,
@@ -129,7 +140,7 @@ func loginUserWithUser(user *m.User, c *middleware.Context) {
 	days := 86400 * setting.LogInRememberDays
 	if days > 0 {
 		c.SetCookie(setting.CookieUserName, user.Login, days, setting.AppSubUrl+"/")
-		c.SetSuperSecureCookie(util.EncodeMd5(user.Rands+user.Password), setting.CookieRememberName, user.Login, days, setting.AppSubUrl+"/")
+		c.SetSuperSecureCookie(user.Rands+user.Password, setting.CookieRememberName, user.Login, days, setting.AppSubUrl+"/")
 	}
 
 	c.Session.Set(middleware.SESS_KEY_USERID, user.Id)

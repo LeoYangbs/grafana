@@ -25,13 +25,37 @@ func ValidateOrgAlert(c *middleware.Context) {
 	}
 }
 
-// GET /api/alerts/rules/
+func GetAlertStatesForDashboard(c *middleware.Context) Response {
+	dashboardId := c.QueryInt64("dashboardId")
+
+	if dashboardId == 0 {
+		return ApiError(400, "Missing query parameter dashboardId", nil)
+	}
+
+	query := models.GetAlertStatesForDashboardQuery{
+		OrgId:       c.OrgId,
+		DashboardId: c.QueryInt64("dashboardId"),
+	}
+
+	if err := bus.Dispatch(&query); err != nil {
+		return ApiError(500, "Failed to fetch alert states", err)
+	}
+
+	return Json(200, query.Result)
+}
+
+// GET /api/alerts
 func GetAlerts(c *middleware.Context) Response {
 	query := models.GetAlertsQuery{
 		OrgId:       c.OrgId,
-		State:       c.QueryStrings("state"),
 		DashboardId: c.QueryInt64("dashboardId"),
 		PanelId:     c.QueryInt64("panelId"),
+		Limit:       c.QueryInt64("limit"),
+	}
+
+	states := c.QueryStrings("state")
+	if len(states) > 0 {
+		query.State = states
 	}
 
 	if err := bus.Dispatch(&query); err != nil {
@@ -49,10 +73,9 @@ func GetAlerts(c *middleware.Context) Response {
 			Name:           alert.Name,
 			Message:        alert.Message,
 			State:          alert.State,
-			Severity:       alert.Severity,
-			EvalDate:       alert.EvalDate,
 			NewStateDate:   alert.NewStateDate,
 			ExecutionError: alert.ExecutionError,
+			EvalData:       alert.EvalData,
 		})
 	}
 
@@ -80,6 +103,10 @@ func GetAlerts(c *middleware.Context) Response {
 
 // POST /api/alerts/test
 func AlertTest(c *middleware.Context, dto dtos.AlertTestCommand) Response {
+	if _, idErr := dto.Dashboard.Get("id").Int64(); idErr != nil {
+		return ApiError(400, "The dashboard needs to be saved at least once before you can test an alert rule", nil)
+	}
+
 	backendCmd := alerting.AlertTestCommand{
 		OrgId:     c.OrgId,
 		Dashboard: dto.Dashboard,
@@ -94,9 +121,10 @@ func AlertTest(c *middleware.Context, dto dtos.AlertTestCommand) Response {
 	}
 
 	res := backendCmd.Result
-
 	dtoRes := &dtos.AlertTestResult{
-		Firing: res.Firing,
+		Firing:         res.Firing,
+		ConditionEvals: res.ConditionEvals,
+		State:          res.Rule.State,
 	}
 
 	if res.Error != nil {
@@ -145,22 +173,27 @@ func DelAlert(c *middleware.Context) Response {
 	return Json(200, resp)
 }
 
+func GetAlertNotifiers(c *middleware.Context) Response {
+	return Json(200, alerting.GetNotifiers())
+}
+
 func GetAlertNotifications(c *middleware.Context) Response {
-	query := &models.GetAlertNotificationsQuery{OrgId: c.OrgId}
+	query := &models.GetAllAlertNotificationsQuery{OrgId: c.OrgId}
 
 	if err := bus.Dispatch(query); err != nil {
 		return ApiError(500, "Failed to get alert notifications", err)
 	}
 
-	var result []dtos.AlertNotification
+	result := make([]*dtos.AlertNotification, 0)
 
 	for _, notification := range query.Result {
-		result = append(result, dtos.AlertNotification{
-			Id:      notification.Id,
-			Name:    notification.Name,
-			Type:    notification.Type,
-			Created: notification.Created,
-			Updated: notification.Updated,
+		result = append(result, &dtos.AlertNotification{
+			Id:        notification.Id,
+			Name:      notification.Name,
+			Type:      notification.Type,
+			IsDefault: notification.IsDefault,
+			Created:   notification.Created,
+			Updated:   notification.Updated,
 		})
 	}
 
@@ -177,7 +210,7 @@ func GetAlertNotificationById(c *middleware.Context) Response {
 		return ApiError(500, "Failed to get alert notifications", err)
 	}
 
-	return Json(200, query.Result[0])
+	return Json(200, query.Result)
 }
 
 func CreateAlertNotification(c *middleware.Context, cmd models.CreateAlertNotificationCommand) Response {
@@ -211,4 +244,77 @@ func DeleteAlertNotification(c *middleware.Context) Response {
 	}
 
 	return ApiSuccess("Notification deleted")
+}
+
+//POST /api/alert-notifications/test
+func NotificationTest(c *middleware.Context, dto dtos.NotificationTestCommand) Response {
+	cmd := &alerting.NotificationTestCommand{
+		Name:     dto.Name,
+		Type:     dto.Type,
+		Settings: dto.Settings,
+	}
+
+	if err := bus.Dispatch(cmd); err != nil {
+		if err == models.ErrSmtpNotEnabled {
+			return ApiError(412, err.Error(), err)
+		}
+		return ApiError(500, "Failed to send alert notifications", err)
+	}
+
+	return ApiSuccess("Test notification sent")
+}
+
+//POST /api/alerts/:alertId/pause
+func PauseAlert(c *middleware.Context, dto dtos.PauseAlertCommand) Response {
+	alertId := c.ParamsInt64("alertId")
+	cmd := models.PauseAlertCommand{
+		OrgId:    c.OrgId,
+		AlertIds: []int64{alertId},
+		Paused:   dto.Paused,
+	}
+
+	if err := bus.Dispatch(&cmd); err != nil {
+		return ApiError(500, "", err)
+	}
+
+	var response models.AlertStateType = models.AlertStatePending
+	pausedState := "un paused"
+	if cmd.Paused {
+		response = models.AlertStatePaused
+		pausedState = "paused"
+	}
+
+	result := map[string]interface{}{
+		"alertId": alertId,
+		"state":   response,
+		"message": "alert " + pausedState,
+	}
+
+	return Json(200, result)
+}
+
+//POST /api/admin/pause-all-alerts
+func PauseAllAlerts(c *middleware.Context, dto dtos.PauseAllAlertsCommand) Response {
+	updateCmd := models.PauseAllAlertCommand{
+		Paused: dto.Paused,
+	}
+
+	if err := bus.Dispatch(&updateCmd); err != nil {
+		return ApiError(500, "Failed to pause alerts", err)
+	}
+
+	var response models.AlertStateType = models.AlertStatePending
+	pausedState := "un paused"
+	if updateCmd.Paused {
+		response = models.AlertStatePaused
+		pausedState = "paused"
+	}
+
+	result := map[string]interface{}{
+		"state":          response,
+		"message":        "alerts " + pausedState,
+		"alertsAffected": updateCmd.ResultCount,
+	}
+
+	return Json(200, result)
 }

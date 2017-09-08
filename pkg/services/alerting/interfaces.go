@@ -3,7 +3,7 @@ package alerting
 import "time"
 
 type EvalHandler interface {
-	Eval(context *EvalContext)
+	Eval(evalContext *EvalContext)
 }
 
 type Scheduler interface {
@@ -12,11 +12,34 @@ type Scheduler interface {
 }
 
 type Notifier interface {
-	Notify(alertResult *EvalContext)
+	Notify(evalContext *EvalContext) error
 	GetType() string
 	NeedsImage() bool
+	PassesFilter(rule *Rule) bool
+
+	GetNotifierId() int64
+	GetIsDefault() bool
+}
+
+type NotifierSlice []Notifier
+
+func (notifiers NotifierSlice) ShouldUploadImage() bool {
+	for _, notifier := range notifiers {
+		if notifier.NeedsImage() {
+			return true
+		}
+	}
+
+	return false
+}
+
+type ConditionResult struct {
+	Firing      bool
+	NoDataFound bool
+	Operator    string
+	EvalMatches []*EvalMatch
 }
 
 type Condition interface {
-	Eval(result *EvalContext)
+	Eval(result *EvalContext) (*ConditionResult, error)
 }

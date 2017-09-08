@@ -8,6 +8,7 @@ import (
 	"github.com/codegangsta/cli"
 	"github.com/grafana/grafana/pkg/cmd/grafana-cli/commands"
 	"github.com/grafana/grafana/pkg/cmd/grafana-cli/logger"
+	"github.com/grafana/grafana/pkg/cmd/grafana-cli/services"
 	"github.com/grafana/grafana/pkg/cmd/grafana-cli/utils"
 )
 
@@ -15,6 +16,8 @@ var version = "master"
 
 func main() {
 	setupLogging()
+
+	services.Init(version)
 
 	app := cli.NewApp()
 	app.Name = "Grafana cli"
@@ -32,7 +35,7 @@ func main() {
 		cli.StringFlag{
 			Name:   "repo",
 			Usage:  "url to the plugin repository",
-			Value:  "https://grafana.net/api/plugins",
+			Value:  "https://grafana.com/api/plugins",
 			EnvVar: "GF_PLUGIN_REPO",
 		},
 		cli.BoolFlag{

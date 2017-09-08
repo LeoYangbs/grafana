@@ -13,30 +13,24 @@ var template = `
         <i class="icon-gf icon-gf-datasources"></i>
       </label>
       <label class="gf-form-label">
-        Panel data source
+        Data Source
       </label>
 
-      <metric-segment segment="ctrl.dsSegment" style-mode="select"
-                      get-options="ctrl.getOptions()"
+      <metric-segment segment="ctrl.dsSegment"
+                      get-options="ctrl.getOptions(true)"
                       on-change="ctrl.datasourceChanged()"></metric-segment>
     </div>
 
     <div class="gf-form gf-form--offset-1">
-      <button class="btn btn-inverse gf-form-btn" ng-click="ctrl.addDataQuery()" ng-hide="ctrl.current.meta.mixed">
+      <button class="btn btn-secondary gf-form-btn" ng-click="ctrl.addDataQuery()" ng-hide="ctrl.current.meta.mixed">
         <i class="fa fa-plus"></i>&nbsp;
         Add query
       </button>
 
       <div class="dropdown" ng-if="ctrl.current.meta.mixed">
-        <button class="btn btn-inverse dropdown-toggle gf-form-btn" data-toggle="dropdown">
-          Add Query&nbsp;<span class="fa fa-caret-down"></span>
-        </button>
-
-        <ul class="dropdown-menu" role="menu">
-          <li ng-repeat="datasource in ctrl.datasources" role="menuitem" ng-hide="datasource.meta.builtIn">
-            <a ng-click="ctrl.addDataQuery(datasource);">{{datasource.name}}</a>
-          </li>
-        </ul>
+        <metric-segment segment="ctrl.mixedDsSegment"
+                        get-options="ctrl.getOptions(false)"
+                        on-change="ctrl.mixedDatasourceChanged()"></metric-segment>
       </div>
     </div>
   </div>
@@ -46,6 +40,7 @@ var template = `
 
 export class MetricsDsSelectorCtrl {
   dsSegment: any;
+  mixedDsSegment: any;
   dsName: string;
   panelCtrl: any;
   datasources: any[];
@@ -67,30 +62,38 @@ export class MetricsDsSelectorCtrl {
       this.current = {name: dsValue + ' not found', value: null};
     }
 
-    this.dsSegment = uiSegmentSrv.newSegment(this.current.name);
+    this.dsSegment = uiSegmentSrv.newSegment({value: this.current.name, selectMode: true});
+    this.mixedDsSegment = uiSegmentSrv.newSegment({value: 'Add query', selectMode: true});
   }
 
-  getOptions() {
-    return Promise.resolve(this.datasources.map(value => {
+  getOptions(includeBuiltin) {
+    return Promise.resolve(this.datasources.filter(value => {
+      return includeBuiltin || !value.meta.builtIn;
+    }).map(value => {
       return this.uiSegmentSrv.newSegment(value.name);
     }));
   }
 
   datasourceChanged() {
-    var ds = _.findWhere(this.datasources, {name: this.dsSegment.value});
+    var ds = _.find(this.datasources, {name: this.dsSegment.value});
     if (ds) {
       this.current = ds;
       this.panelCtrl.setDatasource(ds);
     }
   }
 
-  addDataQuery(datasource) {
+  mixedDatasourceChanged() {
     var target: any = {isNew: true};
-
-    if (datasource) {
-      target.datasource = datasource.name;
+    var ds = _.find(this.datasources, {name: this.mixedDsSegment.value});
+    if (ds) {
+      target.datasource = ds.name;
+      this.panelCtrl.panel.targets.push(target);
+      this.mixedDsSegment.value = '';
     }
+  }
 
+  addDataQuery() {
+    var target: any = {isNew: true};
     this.panelCtrl.panel.targets.push(target);
   }
 }

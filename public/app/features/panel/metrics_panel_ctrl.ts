@@ -12,7 +12,7 @@ import * as dateMath from 'app/core/utils/datemath';
 import {Subject} from 'vendor/npm/rxjs/Subject';
 
 class MetricsPanelCtrl extends PanelCtrl {
-  error: any;
+  scope: any;
   loading: boolean;
   datasource: any;
   datasourceName: any;
@@ -25,11 +25,13 @@ class MetricsPanelCtrl extends PanelCtrl {
   range: any;
   rangeRaw: any;
   interval: any;
+  intervalMs: any;
   resolution: any;
   timeInfo: any;
   skipDataOnInit: boolean;
   dataStream: any;
   dataSubscription: any;
+  dataList: any;
 
   constructor($scope, $injector) {
     super($scope, $injector);
@@ -40,6 +42,7 @@ class MetricsPanelCtrl extends PanelCtrl {
     this.datasourceSrv = $injector.get('datasourceSrv');
     this.timeSrv = $injector.get('timeSrv');
     this.templateSrv = $injector.get('templateSrv');
+    this.scope = $scope;
 
     if (!this.panel.targets) {
       this.panel.targets = [{}];
@@ -47,6 +50,14 @@ class MetricsPanelCtrl extends PanelCtrl {
 
     this.events.on('refresh', this.onMetricsPanelRefresh.bind(this));
     this.events.on('init-edit-mode', this.onInitMetricsPanelEditMode.bind(this));
+    this.events.on('panel-teardown', this.onPanelTearDown.bind(this));
+  }
+
+  private onPanelTearDown() {
+    if (this.dataSubscription) {
+      this.dataSubscription.unsubscribe();
+      this.dataSubscription = null;
+    }
   }
 
   private onInitMetricsPanelEditMode() {
@@ -83,6 +94,7 @@ class MetricsPanelCtrl extends PanelCtrl {
     // load datasource service
     this.setTimeQueryStart();
     this.datasourceSrv.get(this.panel.datasource)
+    .then(this.updateTimeRange.bind(this))
     .then(this.issueQueries.bind(this))
     .then(this.handleQueryResult.bind(this))
     .catch(err => {
@@ -95,10 +107,21 @@ class MetricsPanelCtrl extends PanelCtrl {
       this.loading = false;
       this.error = err.message || "Request Error";
       this.inspector = {error: err};
+
+      if (err.data) {
+        if (err.data.message) {
+          this.error = err.data.message;
+        }
+        if (err.data.error) {
+          this.error = err.data.error;
+        }
+      }
+
       this.events.emit('data-error', err);
       console.log('Panel data error:', err);
     });
   }
+
 
   setTimeQueryStart() {
     this.timing.queryStart = new Date().getTime();
@@ -108,9 +131,10 @@ class MetricsPanelCtrl extends PanelCtrl {
     this.timing.queryEnd = new Date().getTime();
   }
 
-  updateTimeRange() {
+  updateTimeRange(datasource?) {
+    this.datasource = datasource || this.datasource;
     this.range = this.timeSrv.timeRange();
-    this.rangeRaw = this.timeSrv.timeRange(false);
+    this.rangeRaw = this.range.raw;
 
     this.applyPanelTimeOverrides();
 
@@ -120,10 +144,25 @@ class MetricsPanelCtrl extends PanelCtrl {
       this.resolution = Math.ceil($(window).width() * (this.panel.span / 12));
     }
 
-    var panelInterval = this.panel.interval;
-    var datasourceInterval = (this.datasource || {}).interval;
-    this.interval = kbn.calculateInterval(this.range, this.resolution, panelInterval || datasourceInterval);
-  };
+    this.calculateInterval();
+
+    return this.datasource;
+  }
+
+  calculateInterval() {
+    var intervalOverride = this.panel.interval;
+
+    // if no panel interval check datasource
+    if (intervalOverride) {
+      intervalOverride = this.templateSrv.replace(intervalOverride, this.panel.scopedVars);
+    } else if (this.datasource && this.datasource.interval) {
+      intervalOverride = this.datasource.interval;
+    }
+
+    var res = kbn.calculateInterval(this.range, this.resolution, intervalOverride);
+    this.interval = res.interval;
+    this.intervalMs = res.intervalMs;
+  }
 
   applyPanelTimeOverrides() {
     this.timeInfo = '';
@@ -166,25 +205,32 @@ class MetricsPanelCtrl extends PanelCtrl {
     if (this.panel.hideTimeOverride) {
       this.timeInfo = '';
     }
-  };
+  }
 
   issueQueries(datasource) {
-    this.updateTimeRange();
     this.datasource = datasource;
 
     if (!this.panel.targets || this.panel.targets.length === 0) {
       return this.$q.when([]);
     }
 
+    // make shallow copy of scoped vars,
+    // and add built in variables interval and interval_ms
+    var scopedVars = Object.assign({}, this.panel.scopedVars, {
+      "__interval":     {text: this.interval,   value: this.interval},
+      "__interval_ms":  {text: this.intervalMs, value: this.intervalMs},
+    });
+
     var metricsQuery = {
       panelId: this.panel.id,
       range: this.range,
       rangeRaw: this.rangeRaw,
       interval: this.interval,
+      intervalMs: this.intervalMs,
       targets: this.panel.targets,
       format: this.panel.renderer === 'png' ? 'png' : 'json',
       maxDataPoints: this.resolution,
-      scopedVars: this.panel.scopedVars,
+      scopedVars: scopedVars,
       cacheTimeout: this.panel.cacheTimeout
     };
 
@@ -235,6 +281,7 @@ class MetricsPanelCtrl extends PanelCtrl {
       },
       complete: () => {
         console.log('panel: observer got complete');
+        this.dataStream = null;
       }
     });
   }
@@ -244,7 +291,7 @@ class MetricsPanelCtrl extends PanelCtrl {
     if (datasource.meta.mixed) {
       _.each(this.panel.targets, target => {
         target.datasource = this.panel.datasource;
-        if (target.datasource === null) {
+        if (!target.datasource) {
           target.datasource = config.defaultDatasource;
         }
       });

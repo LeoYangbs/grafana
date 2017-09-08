@@ -7,8 +7,10 @@ import _ from 'lodash';
 export class ProfileCtrl {
   user: any;
   old_theme: any;
-  orgs: any;
+  orgs: any = [];
   userForm: any;
+  showOrgsList = false;
+  readonlyLoginFields = config.disableLoginForm;
 
   /** @ngInject **/
   constructor(private backendSrv, private contextSrv, private $location) {
@@ -26,6 +28,7 @@ export class ProfileCtrl {
   getUserOrgs() {
     this.backendSrv.get('/api/user/orgs').then(orgs => {
       this.orgs = orgs;
+      this.showOrgsList = orgs.length > 1;
     });
   }
 

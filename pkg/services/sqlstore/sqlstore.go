@@ -2,6 +2,7 @@ package sqlstore
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -22,12 +23,14 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-type MySQLConfig struct {
-	SslMode        string
-	CaCertPath     string
-	ClientKeyPath  string
-	ClientCertPath string
-	ServerCertName string
+type DatabaseConfig struct {
+	Type, Host, Name, User, Pwd, Path, SslMode string
+	CaCertPath                                 string
+	ClientKeyPath                              string
+	ClientCertPath                             string
+	ServerCertName                             string
+	MaxOpenConn                                int
+	MaxIdleConn                                int
 }
 
 var (
@@ -36,13 +39,10 @@ var (
 
 	HasEngine bool
 
-	DbCfg struct {
-		Type, Host, Name, User, Pwd, Path, SslMode string
-	}
+	DbCfg DatabaseConfig
 
-	mysqlConfig MySQLConfig
-	UseSQLite3  bool
-	sqlog       log.Logger = log.New("sqlstore")
+	UseSQLite3 bool
+	sqlog      log.Logger = log.New("sqlstore")
 )
 
 func EnsureAdminUser() {
@@ -98,8 +98,8 @@ func SetEngine(engine *xorm.Engine) (err error) {
 		return fmt.Errorf("Sqlstore::Migration failed err: %v\n", err)
 	}
 
+	// Init repo instances
 	annotations.SetRepository(&SqlAnnotationRepo{})
-
 	return nil
 }
 
@@ -114,11 +114,11 @@ func getEngine() (*xorm.Engine, error) {
 			protocol = "unix"
 		}
 
-		cnnstr = fmt.Sprintf("%s:%s@%s(%s)/%s?charset=utf8",
+		cnnstr = fmt.Sprintf("%s:%s@%s(%s)/%s?charset=utf8mb4",
 			DbCfg.User, DbCfg.Pwd, protocol, DbCfg.Host, DbCfg.Name)
 
-		if mysqlConfig.SslMode == "true" || mysqlConfig.SslMode == "skip-verify" {
-			tlsCert, err := makeCert("custom", mysqlConfig)
+		if DbCfg.SslMode == "true" || DbCfg.SslMode == "skip-verify" {
+			tlsCert, err := makeCert("custom", DbCfg)
 			if err != nil {
 				return nil, err
 			}
@@ -140,7 +140,7 @@ func getEngine() (*xorm.Engine, error) {
 		if DbCfg.User == "" {
 			DbCfg.User = "''"
 		}
-		cnnstr = fmt.Sprintf("user=%s password=%s host=%s port=%s dbname=%s sslmode=%s", DbCfg.User, DbCfg.Pwd, host, port, DbCfg.Name, DbCfg.SslMode)
+		cnnstr = fmt.Sprintf("user=%s password=%s host=%s port=%s dbname=%s sslmode=%s sslcert=%s sslkey=%s sslrootcert=%s", DbCfg.User, DbCfg.Pwd, host, port, DbCfg.Name, DbCfg.SslMode, DbCfg.ClientCertPath, DbCfg.ClientKeyPath, DbCfg.CaCertPath)
 	case "sqlite3":
 		if !filepath.IsAbs(DbCfg.Path) {
 			DbCfg.Path = filepath.Join(setting.DataPath, DbCfg.Path)
@@ -152,30 +152,61 @@ func getEngine() (*xorm.Engine, error) {
 	}
 
 	sqlog.Info("Initializing DB", "dbtype", DbCfg.Type)
-	return xorm.NewEngine(DbCfg.Type, cnnstr)
+	engine, err := xorm.NewEngine(DbCfg.Type, cnnstr)
+	if err != nil {
+		return nil, err
+	} else {
+		engine.SetMaxOpenConns(DbCfg.MaxOpenConn)
+		engine.SetMaxIdleConns(DbCfg.MaxIdleConn)
+		engine.SetLogger(&xorm.DiscardLogger{})
+		// engine.SetLogger(NewXormLogger(log.LvlInfo, log.New("sqlstore.xorm")))
+		// engine.ShowSQL = true
+		// engine.ShowInfo = true
+	}
+	return engine, nil
 }
 
 func LoadConfig() {
 	sec := setting.Cfg.Section("database")
 
-	DbCfg.Type = sec.Key("type").String()
+	cfgURL := sec.Key("url").String()
+	if len(cfgURL) != 0 {
+		dbURL, _ := url.Parse(cfgURL)
+		DbCfg.Type = dbURL.Scheme
+		DbCfg.Host = dbURL.Host
+
+		pathSplit := strings.Split(dbURL.Path, "/")
+		if len(pathSplit) > 1 {
+			DbCfg.Name = pathSplit[1]
+		}
+
+		userInfo := dbURL.User
+		if userInfo != nil {
+			DbCfg.User = userInfo.Username()
+			DbCfg.Pwd, _ = userInfo.Password()
+		}
+	} else {
+		DbCfg.Type = sec.Key("type").String()
+		DbCfg.Host = sec.Key("host").String()
+		DbCfg.Name = sec.Key("name").String()
+		DbCfg.User = sec.Key("user").String()
+		DbCfg.MaxOpenConn = sec.Key("max_open_conn").MustInt(0)
+		DbCfg.MaxIdleConn = sec.Key("max_idle_conn").MustInt(0)
+		if len(DbCfg.Pwd) == 0 {
+			DbCfg.Pwd = sec.Key("password").String()
+		}
+	}
+
 	if DbCfg.Type == "sqlite3" {
 		UseSQLite3 = true
-	}
-	DbCfg.Host = sec.Key("host").String()
-	DbCfg.Name = sec.Key("name").String()
-	DbCfg.User = sec.Key("user").String()
-	if len(DbCfg.Pwd) == 0 {
-		DbCfg.Pwd = sec.Key("password").String()
+		// only allow one connection as sqlite3 has multi threading issues that casue table locks
+		// DbCfg.MaxIdleConn = 1
+		// DbCfg.MaxOpenConn = 1
 	}
 	DbCfg.SslMode = sec.Key("ssl_mode").String()
+	DbCfg.CaCertPath = sec.Key("ca_cert_path").String()
+	DbCfg.ClientKeyPath = sec.Key("client_key_path").String()
+	DbCfg.ClientCertPath = sec.Key("client_cert_path").String()
+	DbCfg.ServerCertName = sec.Key("server_cert_name").String()
 	DbCfg.Path = sec.Key("path").MustString("data/grafana.db")
-
-	if DbCfg.Type == "mysql" {
-		mysqlConfig.SslMode = DbCfg.SslMode
-		mysqlConfig.CaCertPath = sec.Key("ca_cert_path").String()
-		mysqlConfig.ClientKeyPath = sec.Key("client_key_path").String()
-		mysqlConfig.ClientCertPath = sec.Key("client_cert_path").String()
-		mysqlConfig.ServerCertName = sec.Key("server_cert_name").String()
-	}
 }

@@ -1,4 +1,4 @@
-import {describe, beforeEach, it, sinon, expect} from 'test/lib/common'
+import {describe, beforeEach, it, sinon, expect} from 'test/lib/common';
 
 import {Emitter} from 'app/core/core';
 
@@ -22,6 +22,22 @@ describe("Emitter", () => {
 
       expect(sub1Called).to.be(true);
       expect(sub2Called).to.be(true);
+    });
+
+    it('when subscribing twice', () => {
+      var events = new Emitter();
+      var sub1Called = 0;
+
+      function handler() {
+        sub1Called += 1;
+      }
+
+      events.on('test', handler);
+      events.on('test', handler);
+
+      events.emit('test', null);
+
+      expect(sub1Called).to.be(2);
     });
 
     it('should handle errors', () => {

@@ -10,7 +10,7 @@ function ($, _, angular, Drop) {
   function createAnnotationToolip(element, event) {
     var injector = angular.element(document).injector();
     var content = document.createElement('div');
-    content.innerHTML = '<annotation-tooltip></annotation-tooltip>';
+    content.innerHTML = '<annotation-tooltip event="event"></annotation-tooltip>';
 
     injector.invoke(["$compile", "$rootScope", function($compile, $rootScope) {
       var tmpScope = $rootScope.$new(true);
@@ -24,7 +24,7 @@ function ($, _, angular, Drop) {
         target: element[0],
         content: content,
         position: "bottom center",
-        classes: 'drop-popover',
+        classes: 'drop-popover drop-popover--annotation',
         openOn: 'hover',
         hoverCloseDelay: 200,
         tetherOptions: {
@@ -235,7 +235,7 @@ function ($, _, angular, Drop) {
       top = o.top + this._plot.height();
       left = xaxis.p2c(event.min) + o.left;
 
-      var line = $('<div class="events_line"></div>').css({
+      var line = $('<div class="events_line flot-temp-elem"></div>').css({
         "position": "absolute",
         "opacity": 0.8,
         "left": left + 'px',
@@ -365,20 +365,12 @@ function ($, _, angular, Drop) {
 
     plot.hooks.draw.push(function(plot) {
       var options = plot.getOptions();
-      var container = plot.getPlaceholder();
-      var containerElem = container[0];
-
-      if (containerElem.removeEventsElements) {
-        container.find(".events_line").remove();
-        containerElem.removeEventsElements = false;
-      }
 
       if (eventMarkers.eventsEnabled) {
         // check for first run
         if (eventMarkers.getEvents().length < 1) {
           eventMarkers.setTypes(options.events.types);
           eventMarkers.setupEvents(options.events.data);
-          containerElem.removeEventsElements = true;
         } else {
           eventMarkers.updateEvents();
         }
