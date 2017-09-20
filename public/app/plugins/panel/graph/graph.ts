@@ -596,10 +596,10 @@ coreModule.directive('grafanaGraph', function($rootScope, timeSrv, popoverSrv) {
             return "%H:%M";
           }
           if (secPerTick <= 80000) {
-            return "%m/%d %H:%M";
+            return "%d/%m %H:%M";
           }
           if (secPerTick <= 2419200 || range <= oneYear) {
-            return "%m/%d";
+            return "%d/%m";
           }
           return "%Y-%m";
         }
