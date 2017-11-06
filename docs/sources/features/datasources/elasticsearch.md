@@ -38,8 +38,10 @@ Proxy access means that the Grafana backend will proxy all requests from the bro
 If you select direct access you must update your Elasticsearch configuration to allow other domains to access
 Elasticsearch from the browser. You do this by specifying these to options in your **elasticsearch.yml** config file.
 
-    http.cors.enabled: true
-    http.cors.allow-origin: "*"
+```bash
+http.cors.enabled: true
+http.cors.allow-origin: "*"
+```
 
 ### Index settings
 
@@ -92,9 +94,10 @@ The Elasticsearch data source supports two types of queries you can use in the *
 Query | Description
 ------------ | -------------
 *{"find": "fields", "type": "keyword"} | Returns a list of field names with the index type `keyword`.
-*{"find": "terms", "field": "@hostname"}* |  Returns a list of values for a field using term aggregation. Query will user current dashboard time range as time range for query.
+*{"find": "terms", "field": "@hostname", "size": 1000}* |  Returns a list of values for a field using term aggregation. Query will user current dashboard time range as time range for query.
 *{"find": "terms", "field": "@hostname", "query": '<lucene query>'}* | Returns a list of values for a field using term aggregation & and a specified lucene query filter. Query will use current dashboard time range as time range for query.
 
+There is a default size limit of 500 on terms queries. Set the size property in your query to set a custom limit.
 You can use other variables inside the query. Example query definition for a variable named `$host`.
 
 ```
@@ -132,6 +135,5 @@ Name | Description
 ------------ | -------------
 Query | You can leave the search query blank or specify a lucene query
 Time | The name of the time field, needs to be date field.
-Title | The name of the field to use for the event title.
+Text | Event description field.
 Tags | Optional field name to use for event tags (can be an array or a CSV string).
-Text | Optional field name to use event text body.

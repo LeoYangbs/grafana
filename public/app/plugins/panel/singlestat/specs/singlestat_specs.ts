@@ -1,13 +1,13 @@
-///<reference path="../../../../headers/common.d.ts" />
+import {describe, beforeEach, afterEach, it, sinon, expect, angularMocks} from 'test/lib/common';
 
-import {describe, beforeEach, it, sinon, expect, angularMocks} from '../../../../../test/lib/common';
-
-import angular from 'angular';
-import helpers from '../../../../../test/specs/helpers';
+import helpers from 'test/specs/helpers';
 import {SingleStatCtrl} from '../module';
+import moment from 'moment';
 
 describe('SingleStatCtrl', function() {
   var ctx = new helpers.ControllerTestContext();
+  var epoch = 1505826363746;
+  var clock;
 
   function singleStatScenario(desc, func) {
 
@@ -65,8 +65,74 @@ describe('SingleStatCtrl', function() {
       expect(ctx.data.valueRounded).to.be(0);
     });
 
-    it('should set formatted falue', function() {
+    it('should set formatted value', function() {
       expect(ctx.data.valueFormatted).to.be('test.cpu1');
+    });
+  });
+
+  singleStatScenario('showing last iso time instead of value', function(ctx) {
+    ctx.setup(function() {
+       ctx.data = [
+        {target: 'test.cpu1', datapoints: [[10, 12], [20,1505634997920]]}
+       ];
+      ctx.ctrl.panel.valueName = 'last_time';
+      ctx.ctrl.panel.format = 'dateTimeAsIso';
+    });
+
+    it('Should use time instead of value', function() {
+      expect(ctx.data.value).to.be(1505634997920);
+      expect(ctx.data.valueRounded).to.be(1505634997920);
+    });
+
+    it('should set formatted value', function() {
+      expect(ctx.data.valueFormatted).to.be(moment(1505634997920).format('YYYY-MM-DD HH:mm:ss'));
+    });
+  });
+
+  singleStatScenario('showing last us time instead of value', function(ctx) {
+    ctx.setup(function() {
+       ctx.data = [
+        {target: 'test.cpu1', datapoints: [[10, 12], [20,1505634997920]]}
+       ];
+      ctx.ctrl.panel.valueName = 'last_time';
+      ctx.ctrl.panel.format = 'dateTimeAsUS';
+    });
+
+    it('Should use time instead of value', function() {
+      expect(ctx.data.value).to.be(1505634997920);
+      expect(ctx.data.valueRounded).to.be(1505634997920);
+    });
+
+    it('should set formatted value', function() {
+      expect(ctx.data.valueFormatted).to.be(moment(1505634997920).format('MM/DD/YYYY H:mm:ss a'));
+    });
+  });
+
+  singleStatScenario('showing last time from now instead of value', function(ctx) {
+
+    beforeEach(() => {
+      clock = sinon.useFakeTimers(epoch);
+    });
+
+    ctx.setup(function() {
+       ctx.data = [
+        {target: 'test.cpu1', datapoints: [[10, 12], [20,1505634997920]]}
+       ];
+      ctx.ctrl.panel.valueName = 'last_time';
+      ctx.ctrl.panel.format = 'dateTimeFromNow';
+    });
+
+    it('Should use time instead of value', function() {
+      expect(ctx.data.value).to.be(1505634997920);
+      expect(ctx.data.valueRounded).to.be(1505634997920);
+    });
+
+    it('should set formatted value', function() {
+      expect(ctx.data.valueFormatted).to.be('2 days ago');
+    });
+
+    afterEach(() => {
+      clock.restore();
     });
   });
 
@@ -82,7 +148,7 @@ describe('SingleStatCtrl', function() {
       expect(ctx.data.valueRounded).to.be(100);
     });
 
-    it('should set formatted falue', function() {
+    it('should set formatted value', function() {
       expect(ctx.data.valueFormatted).to.be('100');
     });
   });
@@ -108,7 +174,7 @@ describe('SingleStatCtrl', function() {
     });
   });
 
-  singleStatScenario('When range to text mapping is specifiedfor first range', function(ctx) {
+  singleStatScenario('When range to text mapping is specified for first range', function(ctx) {
     ctx.setup(function() {
       ctx.data = [
         {target: 'test.cpu1', datapoints: [[41,50]]}
@@ -252,6 +318,18 @@ describe('SingleStatCtrl', function() {
 
       it('Should replace value with text NOT OK', function() {
         expect(ctx.data.valueFormatted).to.be('ignore1');
+      });
+    });
+
+    singleStatScenario('When value is zero', function(ctx) {
+      ctx.setup(function() {
+        ctx.data = tableData;
+        ctx.data[0].rows[0] = [1492759673649, 'ignore1', 0, 'ignore2'];
+        ctx.ctrl.panel.tableColumn = 'mean';
+      });
+
+      it('Should return zero', function() {
+        expect(ctx.data.value).to.be(0);
       });
     });
   });

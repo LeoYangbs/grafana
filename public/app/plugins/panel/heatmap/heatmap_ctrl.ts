@@ -7,7 +7,7 @@ import TimeSeries from 'app/core/time_series';
 import {axesEditor} from './axes_editor';
 import {heatmapDisplayEditor} from './display_editor';
 import rendering from './rendering';
-import { convertToHeatMap, elasticHistogramToHeatmap, calculateBucketSize, getMinLog} from './heatmap_data_converter';
+import {convertToHeatMap, convertToCards, elasticHistogramToHeatmap, calculateBucketSize, getMinLog} from './heatmap_data_converter';
 
 let X_BUCKET_NUMBER_DEFAULT = 30;
 let Y_BUCKET_NUMBER_DEFAULT = 10;
@@ -25,6 +25,9 @@ let panelDefaults = {
     colorScale: 'sqrt',
     exponent: 0.5,
     colorScheme: 'interpolateOranges',
+  },
+  legend: {
+    show: false
   },
   dataFormat: 'timeseries',
   xAxis: {
@@ -95,6 +98,8 @@ export class HeatmapCtrl extends MetricsPanelCtrl {
   series: any;
   timeSrv: any;
   dataWarning: any;
+  decimals: number;
+  scaledDecimals: number;
 
   /** @ngInject */
   constructor($scope, $injector, private $rootScope, timeSrv) {
@@ -114,6 +119,8 @@ export class HeatmapCtrl extends MetricsPanelCtrl {
     this.events.on('data-error', this.onDataError.bind(this));
     this.events.on('data-snapshot-load', this.onDataReceived.bind(this));
     this.events.on('init-edit-mode', this.onInitEditMode.bind(this));
+
+    this.onCardColorChange = this.onCardColorChange.bind(this);
   }
 
   onInitEditMode() {
@@ -186,11 +193,15 @@ export class HeatmapCtrl extends MetricsPanelCtrl {
       yBucketSize = 1;
     }
 
+    let {cards, cardStats} = convertToCards(bucketsData);
+
     this.data = {
       buckets: bucketsData,
       heatmapStats: heatmapStats,
       xBucketSize: xBucketSize,
-      yBucketSize: yBucketSize
+      yBucketSize: yBucketSize,
+      cards: cards,
+      cardStats: cardStats
     };
   }
 
@@ -224,6 +235,11 @@ export class HeatmapCtrl extends MetricsPanelCtrl {
 
   onDataError() {
     this.series = [];
+    this.render();
+  }
+
+  onCardColorChange(newColor) {
+    this.panel.color.cardColor = newColor;
     this.render();
   }
 

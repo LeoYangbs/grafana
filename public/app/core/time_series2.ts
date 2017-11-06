@@ -87,9 +87,11 @@ export default class TimeSeries {
       if (override.fill !== void 0) { this.lines.fill = translateFillOption(override.fill); }
       if (override.stack !== void 0) { this.stack = override.stack; }
       if (override.linewidth !== void 0) {
-         this.lines.lineWidth = override.linewidth;
+         this.lines.lineWidth = this.dashes.show ? 0: override.linewidth;
          this.dashes.lineWidth = override.linewidth;
       }
+      if (override.dashLength !== void 0) { this.dashes.dashLength[0] = override.dashLength; }
+      if (override.spaceLength !== void 0) { this.dashes.dashLength[1] = override.spaceLength; }
       if (override.nullPointMode !== void 0) { this.nullPointMode = override.nullPointMode; }
       if (override.pointradius !== void 0) { this.points.radius = override.pointradius; }
       if (override.steppedLine !== void 0) { this.lines.steps = override.steppedLine; }
@@ -166,15 +168,16 @@ export default class TimeSeries {
         if (currentValue < this.stats.min) {
           this.stats.min = currentValue;
         }
-        if (this.stats.first === null){
+
+        if (this.stats.first === null) {
           this.stats.first = currentValue;
-        }else{
+        } else {
           if (previousValue > currentValue) {   // counter reset
             previousDeltaUp = false;
             if (i === this.datapoints.length-1) {  // reset on last
                 this.stats.delta += currentValue;
             }
-          }else{
+          } else {
             if (previousDeltaUp) {
               this.stats.delta += currentValue - previousValue;    // normal increment
             } else {
@@ -189,10 +192,9 @@ export default class TimeSeries {
           this.stats.logmin = currentValue;
         }
 
-      }
-
-      if (currentValue !== 0) {
-        this.allIsZero = false;
+        if (currentValue !== 0) {
+          this.allIsZero = false;
+        }
       }
 
       result.push([currentTime, currentValue]);
@@ -201,7 +203,7 @@ export default class TimeSeries {
     if (this.stats.max === -Number.MAX_VALUE) { this.stats.max = null; }
     if (this.stats.min === Number.MAX_VALUE) { this.stats.min = null; }
 
-    if (result.length) {
+    if (result.length && !this.allIsNull) {
       this.stats.avg = (this.stats.total / nonNulls);
       this.stats.current = result[result.length-1][1];
       if (this.stats.current === null && result.length > 1) {
@@ -226,6 +228,9 @@ export default class TimeSeries {
   }
 
   formatValue(value) {
+    if (!_.isFinite(value)) {
+      value = null; // Prevent NaN formatting
+    }
     return this.valueFormater(value, this.decimals, this.scaledDecimals);
   }
 

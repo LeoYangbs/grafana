@@ -1,16 +1,16 @@
 ///<reference path="../../headers/common.d.ts" />
 
-import angular from 'angular';
 import _ from 'lodash';
-import config from 'app/core/config';
 import coreModule from 'app/core/core_module';
+import appEvents from 'app/core/app_events';
 
 export class BackendSrv {
-  inFlightRequests = {};
-  HTTP_REQUEST_CANCELLED = -1;
+  private inFlightRequests = {};
+  private HTTP_REQUEST_CANCELLED = -1;
+  private noBackendCache: boolean;
 
   /** @ngInject */
-  constructor(private $http, private alertSrv, private $rootScope, private $q, private $timeout, private contextSrv) {
+  constructor(private $http, private alertSrv, private $q, private $timeout, private contextSrv) {
   }
 
   get(url, params?) {
@@ -31,6 +31,13 @@ export class BackendSrv {
 
   put(url, data) {
     return this.request({ method: 'PUT', url: url, data: data });
+  }
+
+  withNoBackendCache(callback) {
+    this.noBackendCache = true;
+    return callback().finally(() => {
+      this.noBackendCache = false;
+    });
   }
 
   requestErrorHandler(err) {
@@ -55,7 +62,13 @@ export class BackendSrv {
     }
 
     if (data.message) {
-      this.alertSrv.set("Problem!", data.message, data.severity, 10000);
+      let description = "";
+      let message = data.message;
+      if (message.length > 80) {
+        description = message;
+        message = "Error";
+      }
+      this.alertSrv.set(message, description, data.severity, 10000);
     }
 
     throw data;
@@ -88,7 +101,7 @@ export class BackendSrv {
       return results.data;
     }, err => {
       // handle unauthorized
-      if (err.status === 401 && firstAttempt) {
+      if (err.status === 401 && this.contextSrv.user.isSignedIn && firstAttempt) {
         return this.loginPing().then(() => {
           options.retry = 1;
           return this.request(options);
@@ -148,9 +161,16 @@ export class BackendSrv {
         options.headers['X-DS-Authorization'] = options.headers.Authorization;
         delete options.headers.Authorization;
       }
+
+      if (this.noBackendCache) {
+        options.headers['X-Grafana-NoCache'] = 'true';
+      }
     }
 
-    return this.$http(options).catch(err => {
+    return this.$http(options).then(response => {
+      appEvents.emit('ds-request-response', response);
+      return response;
+    }).catch(err => {
       if (err.status === this.HTTP_REQUEST_CANCELLED) {
         throw {err, cancelled: true};
       }
@@ -166,7 +186,7 @@ export class BackendSrv {
         });
       }
 
-      //populate error obj on Internal Error
+      // populate error obj on Internal Error
       if (_.isString(err.data) && err.status === 500) {
         err.data = {
           error: err.statusText,
@@ -175,11 +195,13 @@ export class BackendSrv {
       }
 
       // for Prometheus
-      if (!err.data.message && _.isString(err.data.error)) {
+      if (err.data && !err.data.message && _.isString(err.data.error)) {
         err.data.message = err.data.error;
       }
 
+      appEvents.emit('ds-request-error', err);
       throw err;
+
     }).finally(() => {
       // clean up
       if (options.requestId) {
@@ -202,7 +224,12 @@ export class BackendSrv {
 
   saveDashboard(dash, options) {
     options = (options || {});
-    return this.post('/api/dashboards/db/', {dashboard: dash, overwrite: options.overwrite === true});
+
+    return this.post('/api/dashboards/db/', {
+      dashboard: dash,
+      overwrite: options.overwrite === true,
+      message: options.message || '',
+    });
   }
 }
 

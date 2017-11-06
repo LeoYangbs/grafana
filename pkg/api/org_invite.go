@@ -78,6 +78,11 @@ func AddOrgInvite(c *middleware.Context, inviteDto dtos.AddInviteForm) Response 
 			return ApiError(500, "Failed to send email invite", err)
 		}
 
+		emailSentCmd := m.UpdateTempUserWithEmailSentCommand{Code: cmd.Result.Code}
+		if err := bus.Dispatch(&emailSentCmd); err != nil {
+			return ApiError(500, "Failed to update invite with email sent info", err)
+		}
+
 		return ApiSuccess(fmt.Sprintf("Sent invite to %s", inviteDto.LoginOrEmail))
 	}
 
@@ -182,8 +187,8 @@ func CompleteInvite(c *middleware.Context, completeInvite dtos.CompleteInviteFor
 
 	loginUserWithUser(user, c)
 
-	metrics.M_Api_User_SignUpCompleted.Inc(1)
-	metrics.M_Api_User_SignUpInvite.Inc(1)
+	metrics.M_Api_User_SignUpCompleted.Inc()
+	metrics.M_Api_User_SignUpInvite.Inc()
 
 	return ApiSuccess("User created and logged in")
 }
